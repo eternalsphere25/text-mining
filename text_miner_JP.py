@@ -14,9 +14,9 @@ import datetime
 import math
 import MeCab
 import os
-import pandas as pd
 from text_miner_JP_definitions import *
 from tqdm import tqdm
+import pyexcel_ods3
 
 
 def convert_sec_to_min(total_seconds):
@@ -59,25 +59,11 @@ start = datetime.datetime.now()
 #Startup messages
 welcome_message()
 
-#Import data into pandas
+#Import data
 input_file = input('\nEnter file name (include file extension): ')
-input_column = str(input('Enter column to mine: '))
-input_skip = int(input('Enter number of header columns (how many rows to skip): '))
-df_raw = pd.concat(pd.read_excel(input_file, index_col=None, usecols=input_column.upper(), skiprows=input_skip, header=None, sheet_name=None), ignore_index=True)
-df1 = df_raw.rename(columns={char_to_num[input_column.upper()]:'Participant Responses'})
 
-#Remove null values
-null_values = df1[df1['Participant Responses'].isnull()].index.tolist()
-df1 = df1.drop(null_values)
-
-#Clean text inputs
-for x in range(len(df1['Participant Responses'])):
-    raw_string = str(df1.iloc[x][0])
-    remove_char_from_string(df1, raw_string, "・")
-    remove_char_from_string(df1, raw_string, "●")
-    remove_char_from_string(df1, raw_string, "～")
-
-text = df1['Participant Responses'].tolist()
+data = pyexcel_ods3.get_data(input_file)
+extracted_column_data = dict(data)['Sheet1']
 
 
 #-------------------------------------------------------------------------------
@@ -90,8 +76,8 @@ components = []
 
 #Parse all input text strings
 print('\nBegin text parsing...')
-for item in tqdm(range(len(text))):
-    parsed = mt.parseToNode(text[item])
+for item in tqdm(range(len(extracted_column_data))):
+    parsed = mt.parseToNode(extracted_column_data[item][0])
     while parsed:
         components.append(parsed.surface)
         parsed = parsed.next
@@ -122,6 +108,8 @@ for item in range(len(words)):
 #Sort and print list
 sorted_word_freq = dict(
     sorted(word_freq.items(), key=lambda item: int(item[1]), reverse=True))
+for keys in sorted_word_freq:
+    sorted_word_freq[keys] = int(sorted_word_freq[keys])
 print('\nWord frequency calculated')
 print('Total number of entries after filtering: ' + str(len(sorted_word_freq)))
 
@@ -140,17 +128,11 @@ for key in list(sorted_word_freq.keys()):
 # STEP 5: Save results to file and close program
 #-------------------------------------------------------------------------------
 
-#Set analyzed words as csv file columns
-words_out = list(sorted_word_freq.keys())
-
-#Write to csv
-filename = file_name + ext
-print('\nSaving output to .csv...')
-with open(filename, 'w', newline='', encoding=char_enc[0]) as csvfile:
-    writer = csv.DictWriter(csvfile, fieldnames=words_out)
-    writer.writeheader()
-    writer.writerow(sorted_word_freq)
-print('Output saved to: ' + str(os.getcwd()))
+#Write out words to .ods
+words_out = list(sorted_word_freq.items())
+filename = 'text_mining_output.ods'
+write_out = {'Words': words_out}
+pyexcel_ods3.save_data(filename, write_out)
 
 #Closing messages and program close
 end = datetime.datetime.now()
